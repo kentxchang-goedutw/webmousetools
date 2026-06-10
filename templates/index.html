@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>虛擬滑鼠</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-touch-callout:none;-webkit-text-size-adjust:none}
+html,body{width:100%;height:100%;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#1a1a2e;color:#fff}
+
+#loginScreen{position:fixed;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#16213e);z-index:100}
+#loginScreen h2{font-size:24px;margin-bottom:8px}
+#loginScreen p{font-size:14px;color:#aaa;margin-bottom:24px}
+#loginScreen input{width:240px;padding:12px 16px;font-size:16px;border:2px solid #444;border-radius:8px;background:#2a2a4e;color:#fff;outline:none;text-align:center}
+#loginScreen input:focus{border-color:#6c63ff}
+#loginScreen .error{color:#ff4757;font-size:13px;margin-top:8px;min-height:20px}
+#loginScreen button{margin-top:16px;padding:12px 40px;font-size:16px;border:none;border-radius:8px;background:#6c63ff;color:#fff;cursor:pointer;font-weight:600}
+#loginScreen button:active{transform:scale(0.96)}
+
+#touchpad{position:fixed;top:0;left:0;right:0;bottom:0;display:none;flex-direction:column;background:#1a1a2e}
+
+#padArea{flex:1;position:relative;overflow:hidden;background:#16213e;cursor:crosshair}
+#padArea .instruction{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;color:#555;font-size:18px;opacity:0.6}
+#padArea .instruction .dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:#6c63ff;opacity:0.4;margin-bottom:8px}
+
+#cursorDot{position:absolute;width:16px;height:16px;border-radius:50%;background:rgba(108,99,255,0.5);border:2px solid rgba(108,99,255,0.8);pointer-events:none;transform:translate(-50%,-50%);display:none;z-index:10}
+#cursorDot.active{display:block}
+
+#clickFeedback{position:absolute;width:40px;height:40px;border-radius:50%;background:rgba(108,99,255,0.3);border:2px solid rgba(108,99,255,0.6);pointer-events:none;transform:translate(-50%,-50%) scale(0);z-index:11}
+#clickFeedback.show{animation:clickPulse 0.3s ease-out forwards}
+@keyframes clickPulse{0%{transform:translate(-50%,-50%) scale(0.5);opacity:1}100%{transform:translate(-50%,-50%) scale(2);opacity:0}}
+
+#gestureLabel{position:absolute;top:20px;left:50%;transform:translateX(-50%);padding:6px 16px;border-radius:20px;background:rgba(108,99,255,0.2);color:#6c63ff;font-size:13px;pointer-events:none;opacity:0;transition:opacity 0.2s;z-index:12}
+#gestureLabel.show{opacity:1}
+
+#bottomBar{height:100px;background:#1e1e3a;display:flex;align-items:center;padding:10px 16px;gap:12px;flex-shrink:0}
+
+.btn-click{flex:1;height:100%;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;transition:transform 0.1s}
+.btn-click:active{transform:scale(0.95)}
+.btn-left{background:#2d2d5e;color:#fff}
+.btn-left .icon{font-size:22px}
+.btn-right{background:#2d2d5e;color:#fff}
+.btn-right .icon{font-size:22px}
+.btn-label{font-size:11px;opacity:0.6}
+
+.btn-settings{width:44px;height:44px;border-radius:50%;border:none;background:#2d2d5e;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.btn-settings:active{transform:scale(0.9)}
+
+#settingsPanel{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:50}
+#settingsPanel.show{display:flex}
+#settingsBox{background:#1e1e3a;border-radius:16px;padding:24px;width:300px;max-width:90vw}
+#settingsBox h3{margin-bottom:20px;font-size:18px}
+.setting-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.setting-row label{font-size:14px;color:#ccc}
+.setting-row input[type=range]{width:140px;accent-color:#6c63ff}
+.setting-row .val{font-size:14px;color:#6c63ff;min-width:30px;text-align:right}
+#settingsBox .close-btn{width:100%;padding:10px;margin-top:8px;border:none;border-radius:8px;background:#6c63ff;color:#fff;font-size:15px;cursor:pointer}
+
+#statusBar{height:28px;background:#12122a;display:flex;align-items:center;justify-content:space-between;padding:0 12px;flex-shrink:0}
+#statusBar .dot{width:8px;height:8px;border-radius:50%;margin-right:6px;flex-shrink:0}
+#statusBar .dot.green{background:#16a34a}
+#statusBar .dot.red{background:#dc2626}
+#statusBar .dot.yellow{background:#eab308}
+#statusBar .status-text{font-size:11px;color:#999;display:flex;align-items:center;gap:4px}
+#statusBar .fps-text{font-size:10px;color:#555}
+
+#bottomFooter{height:24px;background:#12122a;display:flex;align-items:center;justify-content:center;gap:4px;flex-shrink:0;padding:0 8px}
+#bottomFooter a{color:#6c63ff;font-size:10px;text-decoration:none}
+#bottomFooter span{color:#555;font-size:9px}
+
+@media(max-width:480px){
+  #bottomBar{height:80px;padding:8px 10px;gap:8px}
+  .btn-click{font-size:14px}
+  .btn-click .icon{font-size:18px}
+}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <h2>虛擬滑鼠</h2>
+  <p>請輸入密碼以連線</p>
+  <input type="password" id="pwInput" placeholder="密碼" autocomplete="off">
+  <div class="error" id="pwError"></div>
+  <button onclick="doLogin()">連線</button>
+  <div style="position:fixed;bottom:20px;font-size:11px;color:#555;text-align:center">
+    Made by <a href="https://kentxchang.blogspot.tw" target="_blank" rel="noopener" style="color:#6c63ff;text-decoration:none">阿剛老師</a><br>
+    <span style="font-size:9px;color:#444">本軟體採用 CC BY-NC 4.0 授權</span>
+  </div>
+</div>
+
+<div id="touchpad">
+  <div id="statusBar">
+    <div class="status-text">
+      <span class="dot red" id="statusDot"></span>
+      <span id="statusText">未連線</span>
+    </div>
+    <div class="fps-text" id="fpsText"></div>
+  </div>
+
+  <div id="padArea">
+    <div class="instruction" id="instruction">
+      <div class="dot"></div>
+      <div>觸碰此處控制滑鼠</div>
+    </div>
+    <div id="cursorDot"></div>
+    <div id="clickFeedback"></div>
+    <div id="gestureLabel"></div>
+  </div>
+
+  <div id="bottomBar">
+    <button class="btn-click btn-left" id="btnLeft" ontouchstart="pressLeft(event)" ontouchend="releaseLeft(event)" onmousedown="pressLeft(event)" onmouseup="releaseLeft(event)">
+      <span class="icon">◉</span>
+      <span class="btn-label">左鍵</span>
+    </button>
+    <button class="btn-click btn-right" id="btnRight" ontouchstart="pressRight(event)" ontouchend="releaseRight(event)" onmousedown="pressRight(event)" onmouseup="releaseRight(event)">
+      <span class="icon">◎</span>
+      <span class="btn-label">右鍵</span>
+    </button>
+    <button class="btn-settings" onclick="toggleSettings()">⚙</button>
+  </div>
+
+  <div id="bottomFooter">
+    <span>Made by</span>
+    <a href="https://kentxchang.blogspot.tw" target="_blank" rel="noopener">阿剛老師</a>
+    <span>| CC BY-NC 4.0</span>
+  </div>
+</div>
+
+<div id="settingsPanel">
+  <div id="settingsBox">
+    <h3>設定</h3>
+    <div class="setting-row">
+      <label>移動速度</label>
+      <input type="range" id="speedSlider" min="0.2" max="4" step="0.1" value="1" oninput="updateSpeed()">
+      <span class="val" id="speedVal">1.0</span>
+    </div>
+    <div class="setting-row">
+      <label>滑動距離倍率</label>
+      <input type="range" id="distSlider" min="0.2" max="3" step="0.1" value="1" oninput="updateDist()">
+      <span class="val" id="distVal">1.0</span>
+    </div>
+    <div class="setting-row">
+      <label>滾輪速度</label>
+      <input type="range" id="scrollSlider" min="0.2" max="3" step="0.1" value="1" oninput="updateScroll()">
+      <span class="val" id="scrollVal">1.0</span>
+    </div>
+    <div class="setting-row">
+      <label>震動回饋</label>
+      <input type="checkbox" id="vibCheck" checked onchange="updateVib()" style="accent-color:#6c63ff;width:18px;height:18px">
+    </div>
+    <button class="close-btn" onclick="toggleSettings()">完成</button>
+  </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+function loadSetting(key, def) {
+  try { const v = localStorage.getItem('vm_' + key); return v !== null ? JSON.parse(v) : def; } catch(e) { return def; }
+}
+function saveSetting(key, val) {
+  try { localStorage.setItem('vm_' + key, JSON.stringify(val)); } catch(e) {}
+}
+
+const HAS_PW = {{ 'true' if has_password else 'false' }};
+let socket = null;
+let authed = false;
+let connected = false;
+let sensitivity = loadSetting('speed', 1.0);
+let distRatio = loadSetting('dist', 1.0);
+let scrollSpeed = loadSetting('scroll', 1.0);
+let enableVib = loadSetting('vib', true);
+let reconnTimer = null;
+
+let touches = {};
+let touchOrder = [];
+let lastCentroid = null;
+let longPressTimer = null;
+let longPressFired = false;
+let gestureActive = null;
+let gestureLabelTimeout = null;
+
+let cumulativeDx = 0;
+let cumulativeDy = 0;
+const SWIPE_THRESHOLD = 80;
+const LONG_PRESS_MS = 500;
+
+let hasMovedSinceStart = false;
+
+function applySettings() {
+  const s = document.getElementById('speedSlider'); s.value = sensitivity; document.getElementById('speedVal').textContent = sensitivity.toFixed(1);
+  const d = document.getElementById('distSlider'); d.value = distRatio; document.getElementById('distVal').textContent = distRatio.toFixed(1);
+  const r = document.getElementById('scrollSlider'); r.value = scrollSpeed; document.getElementById('scrollVal').textContent = scrollSpeed.toFixed(1);
+  document.getElementById('vibCheck').checked = enableVib;
+}
+
+// --- UI ---
+if (!HAS_PW) {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('touchpad').style.display = 'flex';
+  connectSocket();
+}
+applySettings();
+
+function doLogin() {
+  const pw = document.getElementById('pwInput').value;
+  document.getElementById('pwError').textContent = '';
+
+  fetch('/check_password', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({password: pw})
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('touchpad').style.display = 'flex';
+      connectSocket(pw);
+    } else {
+      document.getElementById('pwError').textContent = '密碼錯誤';
+      document.getElementById('pwInput').value = '';
+      document.getElementById('pwInput').focus();
+    }
+  })
+  .catch(() => {
+    document.getElementById('pwError').textContent = '連線失敗';
+  });
+}
+
+document.getElementById('pwInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+function connectSocket(pw) {
+  socket = io({transports:['websocket','polling']});
+
+  socket.on('connect', () => {
+    connected = true;
+    updateStatus('connected');
+    if (HAS_PW) {
+      socket.emit('auth', {password: pw || ''});
+    }
+  });
+
+  socket.on('auth_ok', () => {
+    authed = true;
+    updateStatus('authenticated');
+  });
+
+  socket.on('auth_error', (msg) => {
+    authed = false;
+    updateStatus('auth_error', msg.message);
+  });
+
+  socket.on('disconnect', () => {
+    connected = false;
+    authed = false;
+    updateStatus('disconnected');
+    scheduleReconnect(pw);
+  });
+
+  socket.on('connect_error', () => {
+    connected = false;
+    authed = false;
+    updateStatus('disconnected');
+    scheduleReconnect(pw);
+  });
+}
+
+function scheduleReconnect(pw) {
+  if (reconnTimer) clearTimeout(reconnTimer);
+  reconnTimer = setTimeout(() => {
+    if (!connected) connectSocket(pw);
+  }, 3000);
+}
+
+function updateStatus(state, msg) {
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  if (state === 'connected') {
+    dot.className = 'dot yellow';
+    text.textContent = HAS_PW ? '驗證中...' : '就緒';
+  } else if (state === 'authenticated' || state === 'ready') {
+    dot.className = 'dot green';
+    text.textContent = '就緒';
+  } else if (state === 'auth_error') {
+    dot.className = 'dot red';
+    text.textContent = '驗證失敗: ' + (msg || '');
+  } else {
+    dot.className = 'dot red';
+    text.textContent = '未連線';
+  }
+}
+
+function showGestureLabel(label) {
+  const el = document.getElementById('gestureLabel');
+  el.textContent = label;
+  el.classList.add('show');
+  if (gestureLabelTimeout) clearTimeout(gestureLabelTimeout);
+  gestureLabelTimeout = setTimeout(() => el.classList.remove('show'), 1200);
+}
+
+// --- Touch handling ---
+const pad = document.getElementById('padArea');
+const cursorDot = document.getElementById('cursorDot');
+const clickFeedback = document.getElementById('clickFeedback');
+const instruction = document.getElementById('instruction');
+
+pad.addEventListener('touchstart', handleTouchStart, {passive:false});
+pad.addEventListener('touchmove', handleTouchMove, {passive:false});
+pad.addEventListener('touchend', handleTouchEnd, {passive:false});
+pad.addEventListener('touchcancel', handleTouchEnd, {passive:false});
+
+pad.addEventListener('contextmenu', e => e.preventDefault());
+
+function getTouchPos(t) {
+  const rect = pad.getBoundingClientRect();
+  return {x: t.clientX - rect.left, y: t.clientY - rect.top};
+}
+
+function getCentroid() {
+  const ids = Object.keys(touches);
+  if (ids.length === 0) return null;
+  let sx = 0, sy = 0;
+  for (const id of ids) {
+    sx += touches[id].x;
+    sy += touches[id].y;
+  }
+  return {x: sx / ids.length, y: sy / ids.length};
+}
+
+function handleTouchStart(e) {
+  e.preventDefault();
+  instruction.style.display = 'none';
+  cursorDot.classList.add('active');
+
+  for (const t of e.changedTouches) {
+    const pos = getTouchPos(t);
+    touches[t.identifier] = {x: pos.x, y: pos.y, startX: pos.x, startY: pos.y};
+  }
+
+  const count = Object.keys(touches).length;
+  hasMovedSinceStart = false;
+
+  if (count === 1) {
+    longPressFired = false;
+    gestureActive = null;
+    lastCentroid = getCentroid();
+
+    longPressTimer = setTimeout(() => {
+      if (!hasMovedSinceStart && !longPressFired) {
+        longPressFired = true;
+        if (socket && authed) {
+          socket.emit('mouse_click', {button: 'right'});
+          showGestureLabel('右鍵');
+          const t = Object.values(touches)[0];
+          if (t) showClickFeedback(t);
+          vibrate();
+        }
+      }
+    }, LONG_PRESS_MS);
+  } else if (count === 2) {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    longPressFired = true;
+    gestureActive = 'pending';
+    lastCentroid = getCentroid();
+  } else if (count >= 3) {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    longPressFired = true;
+    gestureActive = '3finger';
+    cumulativeDx = 0;
+    cumulativeDy = 0;
+    lastCentroid = getCentroid();
+    if (socket && authed) {
+      socket.emit('gesture_three_finger_drag', {action: 'start'});
+      showGestureLabel('按住左鍵');
+    }
+  }
+}
+
+function handleTouchMove(e) {
+  e.preventDefault();
+  frameCount++;
+  if (Object.keys(touches).length === 0) return;
+
+  for (const t of e.changedTouches) {
+    const pos = getTouchPos(t);
+    touches[t.identifier].x = pos.x;
+    touches[t.identifier].y = pos.y;
+  }
+
+  const count = Object.keys(touches).length;
+  const centroid = getCentroid();
+  if (!centroid || !lastCentroid) return;
+
+  const dx = centroid.x - lastCentroid.x;
+  const dy = centroid.y - lastCentroid.y;
+
+  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) hasMovedSinceStart = true;
+
+  if (!socket || !authed) {
+    lastCentroid = centroid;
+    return;
+  }
+
+  if (count === 1) {
+    if (longPressFired) {
+      lastCentroid = centroid;
+      return;
+    }
+    socket.emit('mouse_move', {dx: dx * sensitivity * distRatio, dy: dy * sensitivity * distRatio, sensitivity: 1});
+    updateCursorDot(centroid);
+  } else if (count === 2) {
+    if (gestureActive === 'pending' && hasMovedSinceStart) {
+      const tArr = Object.values(touches);
+      if (tArr.length >= 2) {
+        const d = Math.hypot(tArr[0].x - tArr[1].x, tArr[0].y - tArr[1].y);
+        const startD = Math.hypot(tArr[0].startX - tArr[1].startX, tArr[0].startY - tArr[1].startY);
+        gestureActive = Math.abs(d - startD) > 20 ? 'pinch' : 'scroll';
+        showGestureLabel(gestureActive === 'pinch' ? '縮放' : '滾輪');
+      }
+    }
+
+    if (gestureActive === 'scroll') {
+      socket.emit('scroll', {dx: dx * scrollSpeed, dy: dy * scrollSpeed});
+    } else if (gestureActive === 'pinch') {
+      const tArr = Object.values(touches);
+      if (tArr.length >= 2) {
+        const d = Math.hypot(tArr[0].x - tArr[1].x, tArr[0].y - tArr[1].y);
+        const startD = Math.hypot(tArr[0].startX - tArr[1].startX, tArr[0].startY - tArr[1].startY);
+        socket.emit('zoom', {scale: d / startD});
+      }
+    }
+  } else if (count >= 3) {
+    cumulativeDx += dx;
+    cumulativeDy += dy;
+    socket.emit('gesture_three_finger_drag', {action: 'move', dx: dx * 2 * distRatio, dy: dy * 2 * distRatio});
+    showGestureLabel('左鍵拖曳');
+  }
+
+  lastCentroid = centroid;
+}
+
+function handleTouchEnd(e) {
+  e.preventDefault();
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+
+  const activeCount = Object.keys(touches).length;
+  const endedPositions = {};
+
+  for (const t of e.changedTouches) {
+    const pos = getTouchPos(t);
+    endedPositions[t.identifier] = pos;
+    delete touches[t.identifier];
+    const idx = touchOrder.indexOf(t.identifier);
+    if (idx >= 0) touchOrder.splice(idx, 1);
+  }
+
+  const remaining = Object.keys(touches).length;
+
+  if (activeCount === 1 && remaining === 0 && !hasMovedSinceStart && !longPressFired) {
+    if (socket && authed) {
+      socket.emit('mouse_click', {button: 'left'});
+      const ep = Object.values(endedPositions)[0];
+      if (ep) showClickFeedback(ep);
+      vibrate();
+    }
+    cursorDot.classList.remove('active');
+  }
+
+  if (activeCount === 2 && remaining === 0 && gestureActive === 'pending' && !hasMovedSinceStart) {
+    if (socket && authed) {
+      socket.emit('mouse_click', {button: 'right'});
+      showGestureLabel('右鍵');
+      vibrate();
+    }
+  }
+
+  if (activeCount >= 3 && remaining === 0) {
+    if (Math.abs(cumulativeDx) > SWIPE_THRESHOLD || Math.abs(cumulativeDy) > SWIPE_THRESHOLD) {
+      const dir = Math.abs(cumulativeDx) > Math.abs(cumulativeDy)
+        ? (cumulativeDx > 0 ? 'right' : 'left')
+        : (cumulativeDy > 0 ? 'down' : 'up');
+      if (socket && authed) {
+        socket.emit('gesture_three_finger_swipe', {direction: dir});
+        const dirNames = {up:'上滑',down:'下滑',left:'左滑',right:'右滑'};
+        showGestureLabel(dirNames[dir] || dir);
+        vibrate();
+      }
+    }
+    if (socket && authed) {
+      socket.emit('gesture_three_finger_drag', {action: 'end'});
+    }
+    cumulativeDx = 0;
+    cumulativeDy = 0;
+  }
+
+  gestureActive = null;
+  lastCentroid = null;
+
+  if (remaining === 0) {
+    cursorDot.classList.remove('active');
+    hasMovedSinceStart = false;
+  }
+}
+
+function updateCursorDot(pos) {
+  if (!pos) return;
+  cursorDot.style.left = pos.x + 'px';
+  cursorDot.style.top = pos.y + 'px';
+}
+
+function showClickFeedback(pos) {
+  if (!pos) return;
+  const el = clickFeedback;
+  el.style.left = (pos.x || 0) + 'px';
+  el.style.top = (pos.y || 0) + 'px';
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 300);
+}
+
+function vibrate() {
+  if (enableVib && navigator.vibrate) {
+    navigator.vibrate(15);
+  }
+}
+
+// --- Buttons ---
+function pressLeft(e) {
+  e.preventDefault();
+  if (socket && authed) socket.emit('mouse_down', {button: 'left'});
+}
+
+function releaseLeft(e) {
+  e.preventDefault();
+  if (socket && authed) socket.emit('mouse_up', {button: 'left'});
+}
+
+function pressRight(e) {
+  e.preventDefault();
+  if (socket && authed) socket.emit('mouse_down', {button: 'right'});
+}
+
+function releaseRight(e) {
+  e.preventDefault();
+  if (socket && authed) socket.emit('mouse_up', {button: 'right'});
+}
+
+function toggleSettings() {
+  document.getElementById('settingsPanel').classList.toggle('show');
+}
+
+function updateSpeed() {
+  sensitivity = parseFloat(document.getElementById('speedSlider').value);
+  document.getElementById('speedVal').textContent = sensitivity.toFixed(1);
+  saveSetting('speed', sensitivity);
+}
+
+function updateDist() {
+  distRatio = parseFloat(document.getElementById('distSlider').value);
+  document.getElementById('distVal').textContent = distRatio.toFixed(1);
+  saveSetting('dist', distRatio);
+}
+
+function updateScroll() {
+  scrollSpeed = parseFloat(document.getElementById('scrollSlider').value);
+  document.getElementById('scrollVal').textContent = scrollSpeed.toFixed(1);
+  saveSetting('scroll', scrollSpeed);
+}
+
+function updateVib() {
+  enableVib = document.getElementById('vibCheck').checked;
+  saveSetting('vib', enableVib);
+}
+
+// --- FPS counter ---
+let frameCount = 0;
+let fpsLastTime = performance.now();
+setInterval(() => {
+  const now = performance.now();
+  const fps = Math.round(frameCount * 1000 / (now - fpsLastTime));
+  document.getElementById('fpsText').textContent = fps + ' FPS';
+  frameCount = 0;
+  fpsLastTime = now;
+}, 1000);
+</script>
+</body>
+</html>
